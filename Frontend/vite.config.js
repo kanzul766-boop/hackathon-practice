@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   server: {
     proxy: {
       "/auth": backend,
+      "/doctor": backend,
       "/api": backend,
       "/doctors": backend,
       "/appointments": backend,

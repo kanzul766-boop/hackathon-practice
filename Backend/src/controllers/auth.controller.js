@@ -27,12 +27,16 @@ function createToken(user) {
 }
 
 function serializeUser(user) {
-  return {
+  const serializedUser = {
     id: user._id,
     userName: user.userName,
     email: user.email,
     role: user.role,
   };
+  if (user.role === "doctor") {
+    serializedUser.doctorApprovalStatus = user.doctorApprovalStatus ?? "approved";
+  }
+  return serializedUser;
 }
 
 async function registerUser(req, res) {
@@ -96,6 +100,75 @@ async function registerUser(req, res) {
   }
 }
 
+async function registerDoctor(req, res) {
+  try {
+    const { userName, email, password, specialization, experience } = req.body ?? {};
+    if (
+      typeof userName !== "string" ||
+      !userName.trim() ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password ||
+      (specialization !== undefined && typeof specialization !== "string") ||
+      (experience !== undefined &&
+        (typeof experience !== "number" ||
+          !Number.isFinite(experience) ||
+          experience < 0))
+    ) {
+      return res.status(400).json({
+        message: "userName, email, and password are required; specialization and experience must be valid when provided",
+      });
+    }
+
+    const normalizedUserName = userName.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await userModel.findOne({
+      $or: [{ userName: normalizedUserName }, { email: normalizedEmail }],
+    });
+    if (existingUser) {
+      return res.status(409).json({
+        message: "A user with that email or username already exists",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const doctor = await userModel.create({
+      userName: normalizedUserName,
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "doctor",
+      doctorApprovalStatus: "pending",
+      specialization: specialization?.trim(),
+      experience: experience ?? 0,
+    });
+    const token = createToken(doctor);
+
+    res.cookie("token", token, {
+      ...COOKIE_OPTIONS,
+      maxAge: 60 * 60 * 1000,
+    });
+
+    return res.status(201).json({
+      message: "Doctor application submitted",
+      user: serializeUser(doctor),
+      token,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        message: "A user with that email or username already exists",
+      });
+    }
+    if (error?.name === "ValidationError") {
+      return res.status(400).json({ message: "Invalid doctor data" });
+    }
+
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 async function loginUser(req, res) {
   try {
     const { email, password } = req.body ?? {};
@@ -113,6 +186,9 @@ async function loginUser(req, res) {
       .select("+password");
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ message: "Invalid email or password" });
+    }
+    if (!user.isActive) {
+      return res.status(403).json({ message: "This account is inactive" });
     }
 
     const token = createToken(user);
@@ -137,4 +213,4 @@ function logoutUser(req, res) {
   return res.status(200).json({ message: "Logout successful" });
 }
 
-export { registerUser, loginUser, logoutUser };
+export { registerUser, registerDoctor, loginUser, logoutUser };

@@ -145,7 +145,7 @@ export function PatientDiscover({ onBook, notify }) {
       {busy ? <DoctorCardSkeletons /> : error ? <ErrorState message={error} retry={loadDoctors} /> : doctors.length ? (
         <div className="doctor-grid">
           {doctors.map((doctor, index) => {
-            const image = demoPortraits[index % demoPortraits.length];
+            const image = doctor.profileImage || demoPortraits[index % demoPortraits.length];
             const isFavorite = favorites.includes(doctor.id);
             return (
               <article className="doctor-card page-enter" key={doctor.id}>
@@ -225,7 +225,7 @@ export function AppointmentList({ role, notify }) {
     }
   }
 
-  const title = role === "patient" ? "My appointments" : role === "doctor" ? "Appointment requests" : "Appointment management";
+  const title = role === "patient" ? "My appointments" : role === "doctor" ? "Received Appointments" : "Appointment management";
   const desc = role === "patient" ? "All the moments you’ve made time for your health." : role === "doctor" ? "A clear view of the people and requests in your care." : "A considered overview of care across your clinic.";
   return (
     <>
@@ -384,6 +384,85 @@ export function DoctorOverview({ user, setView }) {
   );
 }
 
+export function DoctorPendingScreen({ status, onLogout, loggingOut }) {
+  const rejected = status === "rejected";
+  return (
+    <main className="app-boot">
+      <section className="panel doctor-pending-card">
+        <span className="brand-mark"><Stethoscope size={22} /></span>
+        <div className="eyebrow">{rejected ? "APPLICATION UPDATE" : "APPLICATION RECEIVED"}</div>
+        <h1>{rejected ? "Your application was not approved" : "Your application is under review"}</h1>
+        <p>{rejected
+          ? "Please contact the clinic if you believe this decision needs review."
+          : "You can sign in again later. Your Doctor workspace will be available after an Admin approves your account."}</p>
+        <button className="button button-primary" onClick={onLogout} disabled={loggingOut}>
+          {loggingOut ? "Signing out…" : "Sign out"}
+        </button>
+      </section>
+    </main>
+  );
+}
+
+export function DoctorSchedule() {
+  const [appointments, setAppointments] = useState([]);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const localToday = new Date();
+      localToday.setMinutes(localToday.getMinutes() - localToday.getTimezoneOffset());
+      const dateFrom = localToday.toISOString().slice(0, 10);
+      const params = new URLSearchParams({
+        status: "approved",
+        dateFrom,
+        page: "1",
+        limit: "100",
+      });
+      const result = await api(`/appointments/doctor?${params}`);
+      setAppointments(result.appointments || []);
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  return (
+    <>
+      <PageHeader eyebrow="YOUR UPCOMING CARE" title="My Schedule" description="Your upcoming approved appointments, all in one place." />
+      {busy ? <AppointmentSkeletons /> : error ? <ErrorState message={error} retry={load} /> : appointments.length ? (
+        <div className="appointment-list">
+          {appointments.map((appointment) => (
+            <article className="appointment-card page-enter" key={appointment._id}>
+              <div className="appointment-date-block">
+                <span>{new Date(appointment.appointmentDate).toLocaleDateString(undefined, { month: "short" })}</span>
+                <strong>{new Date(appointment.appointmentDate).getDate()}</strong>
+                <small>{new Date(appointment.appointmentDate).toLocaleDateString(undefined, { weekday: "short" })}</small>
+              </div>
+              <div className="appointment-main">
+                <div className="appointment-person">
+                  <span className="person-avatar">{initials(appointment.patient?.userName || "Patient")}</span>
+                  <div><strong>{appointment.patient?.userName || "Patient"}</strong><span>{appointment.patient?.email}</span></div>
+                </div>
+                <div className="appointment-reason"><small>VISIT REASON</small><span>{appointment.reason}</span></div>
+              </div>
+              <div className="appointment-side">
+                <StatusPill status={appointment.status} />
+                <span className="appointment-time"><Clock3 size={14} /> {appointment.appointmentTime}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : <EmptyState icon={CalendarDays} title="Your schedule is open" copy="Approved appointments will appear here." />}
+    </>
+  );
+}
+
 export function PeoplePage({ notify }) {
   const [users, setUsers] = useState([]);
   const [busy, setBusy] = useState(true);
@@ -427,6 +506,10 @@ export function PeoplePage({ notify }) {
     setPendingAction({ kind: "delete", user });
   }
 
+  function reviewDoctor(user, status) {
+    setPendingAction({ kind: "approval", user, status });
+  }
+
   async function confirmAction() {
     if (!pendingAction || actionBusy) return;
     setActionBusy(true);
@@ -434,10 +517,21 @@ export function PeoplePage({ notify }) {
       const { kind, user } = pendingAction;
       if (kind === "status") {
         await api(`/admin/users/${user.id}/status`, { method: "PATCH", body: jsonBody({ isActive: !user.isActive }) });
+      } else if (kind === "approval") {
+        await api(`/admin/doctors/${user.id}/approval`, {
+          method: "PATCH",
+          body: jsonBody({ status: pendingAction.status }),
+        });
       } else {
         await api(`/admin/users/${user.id}`, { method: "DELETE" });
       }
-      notify(kind === "status" ? `${user.userName} ${user.isActive ? "deactivated" : "activated"}.` : "User removed.");
+      notify(
+        kind === "status"
+          ? `${user.userName} ${user.isActive ? "deactivated" : "activated"}.`
+          : kind === "approval"
+            ? `Doctor application ${pendingAction.status}.`
+            : "User removed.",
+      );
       setPendingAction(null);
       load();
     } catch (requestError) {
@@ -459,16 +553,35 @@ export function PeoplePage({ notify }) {
             <div className="people-identity"><strong>{user.userName}</strong><span>{user.email}</span></div>
             <span className={`role-tag role-${user.role}`}>{user.role}</span>
             <span className="people-specialty">{user.specialization || (user.role === "patient" ? "Patient" : "—")}</span>
-            <span className={`active-label ${user.isActive ? "is-active" : "is-inactive"}`}><i />{user.isActive ? "Active" : "Inactive"}</span>
-            {user.role !== "admin" && <div className="row-actions"><button className="text-button" onClick={() => changeActive(user)} disabled={Boolean(pendingAction)}>{user.isActive ? "Deactivate" : "Activate"}</button><button className="text-button danger-text" onClick={() => removeUser(user)} disabled={Boolean(pendingAction)}>Remove</button></div>}
+            <span className={`active-label ${user.isActive ? "is-active" : "is-inactive"}`}><i />{user.isActive ? "Active" : "Inactive"}{user.role === "doctor" ? ` · ${user.doctorApprovalStatus || "approved"}` : ""}</span>
+            {user.role !== "admin" && <div className="row-actions">
+              {user.role === "doctor" && user.doctorApprovalStatus === "pending" && <>
+                <button className="text-button" onClick={() => reviewDoctor(user, "approved")} disabled={Boolean(pendingAction)}>Approve</button>
+                <button className="text-button danger-text" onClick={() => reviewDoctor(user, "rejected")} disabled={Boolean(pendingAction)}>Reject</button>
+              </>}
+              <button className="text-button" onClick={() => changeActive(user)} disabled={Boolean(pendingAction)}>{user.isActive ? "Deactivate" : "Activate"}</button>
+              <button className="text-button danger-text" onClick={() => removeUser(user)} disabled={Boolean(pendingAction)}>Remove</button>
+            </div>}
           </div>)}</div>
         </section>
       ) : <EmptyState icon={UsersRound} title="No matching people" copy="Try a different search." />}
       {pendingAction && <ConfirmDialog
-        title={pendingAction.kind === "delete" ? "Remove this account?" : `${pendingAction.user.isActive ? "Deactivate" : "Activate"} this account?`}
-        message={pendingAction.kind === "delete" ? `${pendingAction.user.userName} will be permanently removed from Clair.` : `This account will be ${pendingAction.user.isActive ? "deactivated and unable to sign in" : "activated"} immediately.`}
-        confirmLabel={pendingAction.kind === "delete" ? "Remove account" : pendingAction.user.isActive ? "Deactivate account" : "Activate account"}
-        destructive={pendingAction.kind === "delete" || pendingAction.user.isActive}
+        title={pendingAction.kind === "delete"
+          ? "Remove this account?"
+          : pendingAction.kind === "approval"
+            ? `${pendingAction.status === "approved" ? "Approve" : "Reject"} this Doctor application?`
+            : `${pendingAction.user.isActive ? "Deactivate" : "Activate"} this account?`}
+        message={pendingAction.kind === "delete"
+          ? `${pendingAction.user.userName} will be permanently removed from Clair.`
+          : pendingAction.kind === "approval"
+            ? `${pendingAction.user.userName}'s Doctor application will be marked ${pendingAction.status}.`
+            : `This account will be ${pendingAction.user.isActive ? "deactivated and unable to sign in" : "activated"} immediately.`}
+        confirmLabel={pendingAction.kind === "delete"
+          ? "Remove account"
+          : pendingAction.kind === "approval"
+            ? pendingAction.status === "approved" ? "Approve application" : "Reject application"
+            : pendingAction.user.isActive ? "Deactivate account" : "Activate account"}
+        destructive={pendingAction.kind === "delete" || pendingAction.kind === "approval" && pendingAction.status === "rejected" || pendingAction.kind === "status" && pendingAction.user.isActive}
         busy={actionBusy}
         onCancel={() => setPendingAction(null)}
         onConfirm={confirmAction}
@@ -480,9 +593,32 @@ export function PeoplePage({ notify }) {
 export function AvailabilityPage({ notify }) {
   const [form, setForm] = useState({ availableDays: [], startTime: "", endTime: "" });
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const saving = useRef(false);
   const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+  const loadAvailability = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await api("/doctors/availability");
+      if (result.availability) {
+        setForm({
+          availableDays: result.availability.availableDays,
+          startTime: result.availability.startTime,
+          endTime: result.availability.endTime,
+        });
+      }
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadAvailability(); }, [loadAvailability]);
+
   function toggleDay(day) {
     setForm((current) => ({ ...current, availableDays: current.availableDays.includes(day) ? current.availableDays.filter((item) => item !== day) : [...current.availableDays, day] }));
   }
@@ -511,14 +647,15 @@ export function AvailabilityPage({ notify }) {
   }
   return (
     <>
-      <PageHeader eyebrow="MAKE ROOM FOR CARE" title="Your availability" description="Select the full weekly schedule you want to publish. Existing hours aren’t returned to this screen, so saving replaces the current schedule." />
+      <PageHeader eyebrow="MAKE ROOM FOR CARE" title="My Availability" description="Choose the working days and hours you want patients to see. You can update them whenever your schedule changes." />
       <div className="availability-layout">
         <form className="panel availability-editor page-enter" onSubmit={save}>
           <div className="panel-heading"><div><div className="eyebrow">WEEKLY RHYTHM</div><h2>When are you available?</h2></div><span className="calendar-mark"><CalendarDays size={20} /></span></div>
+          {loading && <Loading label="Loading your saved availability…" />}
           <div className="day-picker">{days.map((day) => <button key={day} type="button" onClick={() => toggleDay(day)} className={`day-chip ${form.availableDays.includes(day) ? "day-selected" : ""}`}><span>{day.slice(0, 3)}</span>{form.availableDays.includes(day) && <Check size={13} />}</button>)}</div>
           <div className="time-range"><label className="field-label">Start time<input type="time" value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} required /></label><span className="time-dash">to</span><label className="field-label">End time<input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} required /></label></div>
           {error && <div className="form-alert">{error}</div>}
-          <button className="button button-primary" disabled={busy || !form.availableDays.length}>{busy ? <span className="spinner" /> : "Save availability"}</button>
+          <button className="button button-primary" disabled={busy || loading || !form.availableDays.length}>{busy ? <span className="spinner" /> : "Save availability"}</button>
         </form>
         <aside className="availability-aside page-enter"><div className="availability-illustration"><div className="availability-orb"><Clock3 size={32} /></div><span className="orbit-dot" /><span className="orbit-dot orbit-dot-two" /></div><div className="eyebrow">A GENTLER SCHEDULE</div><h3>Good boundaries<br />make better care.</h3><p>Your availability helps patients find a time that works for both of you. You can update these hours whenever life changes.</p><div className="aside-tip"><Sparkles size={16} /><span>Choose your complete schedule; saving replaces the current hours.</span></div></aside>
       </div>

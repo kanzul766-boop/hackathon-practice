@@ -23,8 +23,9 @@ export const navByRole = {
   ],
   doctor: [
     { id: "overview", label: "Overview", icon: "grid" },
-    { id: "appointments", label: "Appointment requests", icon: "calendar" },
+    { id: "appointments", label: "Received Appointments", icon: "calendar" },
     { id: "availability", label: "Availability", icon: "clock" },
+    { id: "schedule", label: "My Schedule", icon: "calendar" },
     { id: "notifications", label: "Notifications", icon: "bell" },
     { id: "profile", label: "My profile", icon: "user" },
   ],

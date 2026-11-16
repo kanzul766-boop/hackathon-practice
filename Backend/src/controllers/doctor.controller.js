@@ -19,6 +19,7 @@ function doctorResponse(doctor) {
     name: doctor.userName,
     specialization: doctor.specialization,
     experience: doctor.experience,
+    profileImage: doctor.profileImage,
   };
 }
 
@@ -99,6 +100,18 @@ async function updateAvailability(req, res) {
   }
 }
 
+async function getMyAvailability(req, res) {
+  try {
+    const availability = await doctorAvailabilityModel
+      .findOne({ doctor: req.user._id })
+      .select("doctor availableDays startTime endTime");
+    return res.status(200).json({ availability: availability ?? null });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 async function getDoctorAvailability(req, res) {
   if (!mongoose.isObjectIdOrHexString(req.params.id)) {
     return res.status(400).json({ message: "Invalid doctor ID" });
@@ -109,6 +122,10 @@ async function getDoctorAvailability(req, res) {
       _id: req.params.id,
       role: "doctor",
       isActive: true,
+      $or: [
+        { doctorApprovalStatus: "approved" },
+        { doctorApprovalStatus: { $exists: false } },
+      ],
     });
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
@@ -117,10 +134,7 @@ async function getDoctorAvailability(req, res) {
     const availability = await doctorAvailabilityModel
       .findOne({ doctor: doctor._id })
       .select("doctor availableDays startTime endTime");
-    if (!availability) {
-      return res.status(404).json({ message: "Doctor availability not found" });
-    }
-    return res.status(200).json({ availability });
+    return res.status(200).json({ availability: availability ?? null });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: "Internal server error" });
@@ -140,7 +154,14 @@ async function getDoctors(req, res) {
     return res.status(400).json({ message: "name and specialization must be strings" });
   }
 
-  const filter = { role: "doctor", isActive: true };
+  const filter = {
+    role: "doctor",
+    isActive: true,
+    $or: [
+      { doctorApprovalStatus: "approved" },
+      { doctorApprovalStatus: { $exists: false } },
+    ],
+  };
   if (name?.trim()) {
     const escapedName = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     filter.userName = { $regex: escapedName, $options: "i" };
@@ -157,7 +178,7 @@ async function getDoctors(req, res) {
     const [doctors, total] = await Promise.all([
       userModel
         .find(filter)
-        .select("userName specialization experience")
+        .select("userName specialization experience profileImage")
         .sort({ userName: 1 })
         .skip(pagination.skip)
         .limit(pagination.limit),
@@ -181,8 +202,16 @@ async function getDoctorById(req, res) {
 
   try {
     const doctor = await userModel
-      .findOne({ _id: req.params.id, role: "doctor", isActive: true })
-      .select("userName specialization experience");
+      .findOne({
+        _id: req.params.id,
+        role: "doctor",
+        isActive: true,
+        $or: [
+          { doctorApprovalStatus: "approved" },
+          { doctorApprovalStatus: { $exists: false } },
+        ],
+      })
+      .select("userName specialization experience profileImage");
 
     if (!doctor) {
       return res.status(404).json({ message: "Doctor not found" });
@@ -198,6 +227,7 @@ async function getDoctorById(req, res) {
 export {
   getDoctors,
   getDoctorById,
+  getMyAvailability,
   createAvailability,
   updateAvailability,
   getDoctorAvailability,

@@ -28,6 +28,35 @@ function parseAppointmentDate(value) {
   return date;
 }
 
+const SPECIALTY_CLUES = {
+  Cardiology: /\b(?:cardiology|cardiologist|cardiac|heart)\b/i,
+  Dermatology: /\b(?:dermatology|dermatologist|skin|rash|acne|mole|eczema|psoriasis)\b/i,
+  Pediatrics: /\b(?:pediatric(?:s|ian)?|child(?:ren)?|infant|newborn|baby|toddler)\b/i,
+  Neurology: /\b(?:neurology|neurologist|seizure|migraine|brain|nerves?)\b/i,
+  Orthopedics: /\b(?:orthoped(?:ics?|ist)|bones?|joints?|fracture|sprain)\b/i,
+};
+
+function getSpecialtyMismatch(specialization, reason) {
+  if (/\b(?:general|family|internal)\s+(?:medicine|care|practice)\b|\bprimary care\b/i.test(specialization)) {
+    return null;
+  }
+
+  const reasonSpecialties = Object.entries(SPECIALTY_CLUES)
+    .filter(([, clue]) => clue.test(reason))
+    .map(([name]) => name);
+  if (reasonSpecialties.length !== 1) {
+    return null;
+  }
+
+  const doctorSpecialty = Object.entries(SPECIALTY_CLUES)
+    .find(([, clue]) => clue.test(specialization))?.[0];
+  if (!doctorSpecialty || doctorSpecialty === reasonSpecialties[0]) {
+    return null;
+  }
+
+  return `This reason appears to fit ${reasonSpecialties[0]}, while the selected Doctor specializes in ${specialization}. Please choose a matching Doctor or contact the clinic if you are unsure. This check is only a booking-fit hint, not a medical diagnosis.`;
+}
+
 async function bookAppointment(req, res) {
   const { doctorId, date, time, reason } = req.body ?? {};
   if (
@@ -59,26 +88,35 @@ async function bookAppointment(req, res) {
       _id: doctorId,
       role: "doctor",
       isActive: true,
+      $or: [
+        { doctorApprovalStatus: "approved" },
+        { doctorApprovalStatus: { $exists: false } },
+      ],
     });
     if (!doctor) {
       return res.status(404).json({ message: "Active doctor not found" });
     }
 
-    const availability = await doctorAvailabilityModel.findOne({ doctor: doctor._id });
-    if (!availability) {
-      return res.status(409).json({
-        message: "The doctor has not configured availability",
-      });
+    const specialtyMismatch = getSpecialtyMismatch(
+      doctor.specialization ?? "",
+      reason.trim(),
+    );
+    if (specialtyMismatch) {
+      return res.status(400).json({ message: specialtyMismatch });
     }
-    const weekday = WEEKDAYS[appointmentDate.getDay()];
-    if (
-      !availability.availableDays.includes(weekday) ||
-      time < availability.startTime ||
-      time >= availability.endTime
-    ) {
-      return res.status(400).json({
-        message: "Selected date and time are outside the doctor's availability",
-      });
+
+    const availability = await doctorAvailabilityModel.findOne({ doctor: doctor._id });
+    if (availability) {
+      const weekday = WEEKDAYS[appointmentDate.getDay()];
+      if (
+        !availability.availableDays.includes(weekday) ||
+        time < availability.startTime ||
+        time >= availability.endTime
+      ) {
+        return res.status(400).json({
+          message: "Selected date and time are outside the doctor's availability",
+        });
+      }
     }
 
     const existingAppointment = await appointmentModel.exists({

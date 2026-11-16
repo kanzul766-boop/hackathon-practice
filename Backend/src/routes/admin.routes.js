@@ -1,10 +1,12 @@
 import express from "express";
 import {
+  createAdmin,
   createDoctor,
   deleteUser,
   getAppointments,
   getStats,
   getUsers,
+  updateDoctorApprovalStatus,
   updateUserStatus,
 } from "../controllers/admin.controller.js";
 import authenticateUser from "../middleware/auth.middleware.js";
@@ -20,6 +22,8 @@ router.use(authenticateUser, (req, res, next) => {
 
 router.get("/users", getUsers);
 router.post("/doctors", createDoctor);
+router.post("/admins", createAdmin);
+router.patch("/doctors/:id/approval", updateDoctorApprovalStatus);
 router.delete("/users/:id", deleteUser);
 router.patch("/users/:id/status", updateUserStatus);
 router.get("/appointments", getAppointments);

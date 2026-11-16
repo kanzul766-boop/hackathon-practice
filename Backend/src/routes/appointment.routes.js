@@ -6,7 +6,7 @@ import {
   getMyAppointments,
   updateAppointmentStatus,
 } from "../controllers/appointment.controller.js";
-import authenticateUser from "../middleware/auth.middleware.js";
+import authenticateUser, { requireApprovedDoctor } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
@@ -19,17 +19,10 @@ function requirePatient(req, res, next) {
   return next();
 }
 
-function requireDoctor(req, res, next) {
-  if (req.user.role !== "doctor") {
-    return res.status(403).json({ message: "Only doctors can access this endpoint" });
-  }
-  return next();
-}
-
 router.post("/", requirePatient, bookAppointment);
 router.get("/my", requirePatient, getMyAppointments);
 router.patch("/:id/cancel", requirePatient, cancelAppointment);
-router.get("/doctor", requireDoctor, getDoctorAppointments);
-router.patch("/:id/status", requireDoctor, updateAppointmentStatus);
+router.get("/doctor", requireApprovedDoctor, getDoctorAppointments);
+router.patch("/:id/status", requireApprovedDoctor, updateAppointmentStatus);
 
 export default router;

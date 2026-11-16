@@ -23,6 +23,7 @@ const DEMO_USERS = [
     email: "demo.avery@clinic.local",
     password: "DevDoctor!2026",
     role: "doctor",
+    doctorApprovalStatus: "approved",
     specialization: "Cardiology",
     experience: 12,
   },
@@ -31,6 +32,7 @@ const DEMO_USERS = [
     email: "demo.morgan@clinic.local",
     password: "DevDoctor!2026",
     role: "doctor",
+    doctorApprovalStatus: "approved",
     specialization: "Dermatology",
     experience: 8,
   },
@@ -39,6 +41,7 @@ const DEMO_USERS = [
     email: "demo.patel@clinic.local",
     password: "DevDoctor!2026",
     role: "doctor",
+    doctorApprovalStatus: "approved",
     specialization: "Pediatrics",
     experience: 10,
   },
@@ -91,11 +94,22 @@ const DEMO_APPOINTMENTS = [
 
 async function seedUser(userData) {
   const { password, ...userFields } = userData;
-  const existingUser = await userModel.findOne({ email: userFields.email });
+  const escapedEmail = userFields.email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const existingUsers = await userModel.find({
+    $or: [
+      { email: { $regex: `^${escapedEmail}$`, $options: "i" } },
+      { userName: userFields.userName },
+    ],
+  });
+  if (existingUsers.length > 1) {
+    throw new Error(`Multiple existing accounts conflict with demo account ${userFields.email}`);
+  }
+
+  const existingUser = existingUsers[0];
   if (
     existingUser &&
     (existingUser.userName !== userFields.userName ||
-      existingUser.role !== userFields.role)
+      existingUser.email?.toLowerCase() !== userFields.email.toLowerCase())
   ) {
     throw new Error(`Demo account identity conflict for ${userFields.email}`);
   }
@@ -182,6 +196,13 @@ async function seedDevelopmentData() {
     usersByEmail.set(user.email, user);
   }
 
+  const seededAdmin = await userModel
+    .findOne({ email: "demo.admin@clinic.local" })
+    .select("email role");
+  if (!seededAdmin || seededAdmin.role !== "admin") {
+    throw new Error("Seed verification failed: demo.admin@clinic.local is not an admin");
+  }
+
   const weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
   for (const doctorEmail of [
     "demo.avery@clinic.local",
@@ -203,7 +224,8 @@ async function seedDevelopmentData() {
   }
 
   await seedAppointments(usersByEmail);
-  console.log("Development demo data is ready.");
+  console.log(`Development demo data is ready in database "${mongoose.connection.name}".`);
+  console.log("Verified demo.admin@clinic.local has role admin.");
   console.log("Admin: demo.admin@clinic.local / DevAdmin!2026");
   console.log("Doctor: demo.avery@clinic.local / DevDoctor!2026");
   console.log("Patient: demo.jamie@clinic.local / DevPatient!2026");

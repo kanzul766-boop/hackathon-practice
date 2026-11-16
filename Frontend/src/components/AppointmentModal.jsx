@@ -79,14 +79,16 @@ export default function AppointmentModal({ doctor, onClose, onBooked, notify }) 
     event.preventDefault();
     if (submitting.current) return;
     const selectedDate = new Date(`${date}T00:00:00`);
-    const weekday = selectedDate.toLocaleDateString("en-US", { weekday: "long" });
-    if (!availability.availableDays.includes(weekday)) {
-      setError("Choose a date on one of this doctor’s available days.");
-      return;
-    }
-    if (time < availability.startTime || time >= availability.endTime) {
-      setError("Choose a time within the doctor’s hours. The end time is not included.");
-      return;
+    if (availability) {
+      const weekday = selectedDate.toLocaleDateString("en-US", { weekday: "long" });
+      if (!availability.availableDays.includes(weekday)) {
+        setError("Choose a date on one of this doctor’s available days.");
+        return;
+      }
+      if (time < availability.startTime || time >= availability.endTime) {
+        setError("Choose a time within the doctor’s hours. The end time is not included.");
+        return;
+      }
     }
     submitting.current = true;
     setBusy(true);
@@ -117,18 +119,22 @@ export default function AppointmentModal({ doctor, onClose, onBooked, notify }) 
           <img src={doctor.image} alt="" />
           <div><span className="eyebrow">YOUR VISIT</span><h2 id="booking-title">Book with {doctor.name}</h2><p>{doctor.specialization}</p></div>
         </div>
-        {availability ? (
+        {loadingAvailability ? <div className="modal-loading"><span className="spinner" /> Checking availability…</div> : error ? (
+          <div className="modal-error" role="alert"><span>{error}</span><button className="button button-soft" onClick={loadAvailability} disabled={loadingAvailability}>{loadingAvailability ? <span className="spinner" /> : "Try again"}</button></div>
+        ) : (
           <>
-            <div className="availability-banner"><CalendarDays size={17} /><span>{availability.availableDays.join(" · ")} <b>{availability.startTime}–{availability.endTime}</b></span></div>
+            {availability
+              ? <div className="availability-banner"><CalendarDays size={17} /><span>{availability.availableDays.join(" · ")} <b>{availability.startTime}–{availability.endTime}</b></span></div>
+              : <div className="availability-banner"><CalendarDays size={17} /><span>This doctor has not set weekly hours. Pick a future date and time.</span></div>}
             <form className="modal-form" onSubmit={submit}>
               <label className="field-label">Choose a date<input type="date" min={minDate} value={date} onChange={(e) => setDate(e.target.value)} required /></label>
-              <label className="field-label">Preferred time<input type="time" min={availability.startTime} max={availability.endTime} value={time} onChange={(e) => setTime(e.target.value)} required /></label>
-              <label className="field-label">What would you like help with?<textarea rows="3" maxLength="500" placeholder="Share a little about your visit..." value={reason} onChange={(e) => setReason(e.target.value)} required /></label>
+              <label className="field-label">Preferred time<input type="time" min={availability?.startTime} max={availability?.endTime} value={time} onChange={(e) => setTime(e.target.value)} required /></label>
+              <label className="field-label">What would you like help with?<textarea rows="3" maxLength="500" placeholder="Share a little about your visit..." value={reason} onChange={(e) => setReason(e.target.value)} required /><small>This may flag a clear specialty mismatch; it is not used to diagnose you.</small></label>
               {error && <div className="form-alert" role="alert">{error}</div>}
               <button className="button button-primary full-button" disabled={busy}>{busy ? <span className="spinner" /> : <><Clock3 size={16} /> Request appointment</>}</button>
             </form>
           </>
-        ) : error ? <div className="modal-error" role="alert"><span>{error}</span><button className="button button-soft" onClick={loadAvailability} disabled={loadingAvailability}>{loadingAvailability ? <span className="spinner" /> : "Try again"}</button></div> : <div className="modal-loading"><span className="spinner" /> Checking availability…</div>}
+        )}
       </section>
     </div>
   );

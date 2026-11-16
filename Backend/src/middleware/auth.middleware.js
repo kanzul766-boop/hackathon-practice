@@ -30,7 +30,9 @@ async function authenticateUser(req, res, next) {
   }
 
   try {
-    const user = await userModel.findById(decoded.id).select("_id isActive role");
+    const user = await userModel
+      .findById(decoded.id)
+      .select("_id isActive role doctorApprovalStatus");
     if (!user || !user.isActive) {
       return res.status(401).json({ message: "Authentication required" });
     }
@@ -42,4 +44,18 @@ async function authenticateUser(req, res, next) {
   }
 }
 
+function requireApprovedDoctor(req, res, next) {
+  if (req.user?.role !== "doctor") {
+    return res.status(403).json({ message: "Only doctors can access this endpoint" });
+  }
+  if ((req.user.doctorApprovalStatus ?? "approved") !== "approved") {
+    return res.status(403).json({
+      message: "Doctor account is awaiting approval",
+      doctorApprovalStatus: req.user.doctorApprovalStatus,
+    });
+  }
+  return next();
+}
+
 export default authenticateUser;
+export { requireApprovedDoctor };

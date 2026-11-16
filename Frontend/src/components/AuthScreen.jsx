@@ -13,7 +13,14 @@ import ThemeToggle from "./ThemeToggle.jsx";
 
 export default function AuthScreen({ onAuthenticated, theme, onToggleTheme }) {
   const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({ userName: "", email: "", password: "" });
+  const [registrationRole, setRegistrationRole] = useState("patient");
+  const [form, setForm] = useState({
+    userName: "",
+    email: "",
+    password: "",
+    specialization: "",
+    experience: "0",
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const submitting = useRef(false);
@@ -25,9 +32,30 @@ export default function AuthScreen({ onAuthenticated, theme, onToggleTheme }) {
     setBusy(true);
     setError("");
     try {
-      const result = await api(`/auth/${mode === "login" ? "login" : "register"}`, {
+      const isDoctorRegistration = mode === "register" && registrationRole === "doctor";
+      const path = mode === "login"
+        ? "/auth/login"
+        : isDoctorRegistration
+          ? "/doctor/register"
+          : "/auth/register";
+      const body = mode === "login"
+        ? { email: form.email, password: form.password }
+        : isDoctorRegistration
+          ? {
+              userName: form.userName,
+              email: form.email,
+              password: form.password,
+              specialization: form.specialization,
+              experience: Number(form.experience),
+            }
+          : {
+              userName: form.userName,
+              email: form.email,
+              password: form.password,
+            };
+      const result = await api(path, {
         method: "POST",
-        body: jsonBody(form),
+        body: jsonBody(body),
       });
       setToken(result.token);
       onAuthenticated(result.user);
@@ -83,8 +111,8 @@ export default function AuthScreen({ onAuthenticated, theme, onToggleTheme }) {
         <div className="auth-content">
           <div className="auth-heading">
             <div className="auth-kicker"><Stethoscope size={15} /> YOUR HEALTH, IN GOOD HANDS</div>
-            <h2>{mode === "login" ? "Welcome back" : "A healthier you starts here"}</h2>
-            <p>{mode === "login" ? "Sign in to pick up right where you left off." : "Create your account and make room for better care."}</p>
+            <h2>{mode === "login" ? "Welcome back" : registrationRole === "doctor" ? "Apply to join our doctors" : "A healthier you starts here"}</h2>
+            <p>{mode === "login" ? "Sign in to pick up right where you left off." : registrationRole === "doctor" ? "Submit your details for Admin review before joining the clinic." : "Create your account and make room for better care."}</p>
           </div>
           <div className="auth-tabs" role="tablist">
             <button type="button" className={mode === "login" ? "active" : ""} onClick={() => { setMode("login"); setError(""); }} disabled={busy}>Sign in</button>
@@ -92,9 +120,27 @@ export default function AuthScreen({ onAuthenticated, theme, onToggleTheme }) {
           </div>
           <form onSubmit={submit} className="auth-form">
             {mode === "register" && (
-              <label className="field-label">Your name
-                <input autoComplete="name" placeholder="e.g. Jamie Parker" value={form.userName} onChange={(e) => setForm({ ...form, userName: e.target.value })} required />
-              </label>
+              <>
+                <label className="field-label">Account type
+                  <select value={registrationRole} onChange={(e) => setRegistrationRole(e.target.value)} disabled={busy}>
+                    <option value="patient">Patient</option>
+                    <option value="doctor">Doctor application</option>
+                  </select>
+                </label>
+                <label className="field-label">Your name
+                  <input autoComplete="name" placeholder="e.g. Jamie Parker" value={form.userName} onChange={(e) => setForm({ ...form, userName: e.target.value })} required />
+                </label>
+              </>
+            )}
+            {mode === "register" && registrationRole === "doctor" && (
+              <>
+                <label className="field-label">Specialization
+                  <input value={form.specialization} onChange={(e) => setForm({ ...form, specialization: e.target.value })} />
+                </label>
+                <label className="field-label">Years of experience
+                  <input type="number" min="0" step="1" value={form.experience} onChange={(e) => setForm({ ...form, experience: e.target.value })} />
+                </label>
+              </>
             )}
             <label className="field-label">Email address
               <input autoComplete="email" type="email" placeholder="you@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
@@ -104,7 +150,7 @@ export default function AuthScreen({ onAuthenticated, theme, onToggleTheme }) {
             </label>
             {error && <div className="form-alert" role="alert">{error}</div>}
             <button className="button button-primary auth-submit" disabled={busy}>
-              {busy ? <span className="spinner" /> : <>{mode === "login" ? "Sign in to Clair" : "Create my account"} <ArrowRight size={17} /></>}
+              {busy ? <span className="spinner" /> : <>{mode === "login" ? "Sign in to Clair" : registrationRole === "doctor" ? "Submit doctor application" : "Create my account"} <ArrowRight size={17} /></>}
             </button>
           </form>
           <div className="auth-assurance"><ShieldCheck size={16} /><span>Your health information stays private and protected.</span></div>

@@ -371,6 +371,7 @@ a { color: inherit; text-decoration: none; }
 .toast { position: fixed; z-index: 40; right: 24px; bottom: 24px; max-width: min(430px, calc(100vw - 32px)); display: flex; align-items: center; gap: 10px; padding: 13px 14px; border: 1px solid #e7e8ef; border-radius: 13px; color: #4d6e5a; background: #fff; box-shadow: 0 13px 42px #28264025; font-size: 11px; animation: toast-in .25s ease; }
 .toast-error { color: #a35667; }.toast > span { flex: 1; line-height: 1.5; }.toast-close { width: 26px; height: 26px; flex: 0 0 auto; }
 .app-boot { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 12px; color: #898b9d; background: #f8f8fc; font-size: 12px; }.app-boot .brand-mark { width: 38px; height: 38px; }
+.doctor-pending-card { width: min(460px, calc(100% - 32px)); padding: 34px; text-align: center; }.doctor-pending-card .brand-mark { margin: 0 auto 18px; }.doctor-pending-card h1 { margin: 12px 0 8px; color: var(--ink); font: 700 24px "Manrope", sans-serif; }.doctor-pending-card p { margin: 0 0 22px; color: #85889c; font-size: 13px; line-height: 1.6; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }

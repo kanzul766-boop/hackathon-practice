@@ -9,7 +9,7 @@ import {
 } from "../utils/list-query.js";
 
 function serializeUser(user) {
-  return {
+  const serializedUser = {
     id: user._id,
     userName: user.userName,
     email: user.email,
@@ -18,13 +18,17 @@ function serializeUser(user) {
     experience: user.experience,
     isActive: user.isActive,
   };
+  if (user.role === "doctor") {
+    serializedUser.doctorApprovalStatus = user.doctorApprovalStatus ?? "approved";
+  }
+  return serializedUser;
 }
 
 async function getUsers(req, res) {
   try {
     const users = await userModel
       .find({})
-      .select("userName email role specialization experience isActive")
+      .select("userName email role doctorApprovalStatus specialization experience isActive")
       .sort({ userName: 1 });
 
     return res.status(200).json({ users: users.map(serializeUser) });
@@ -71,6 +75,7 @@ async function createDoctor(req, res) {
       email: normalizedEmail,
       password: hashedPassword,
       role: "doctor",
+      doctorApprovalStatus: "pending",
       specialization: specialization?.trim(),
       experience: experience ?? 0,
     });
@@ -89,6 +94,98 @@ async function createDoctor(req, res) {
       return res.status(400).json({ message: "Invalid doctor data" });
     }
 
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function createAdmin(req, res) {
+  const { userName, email, password } = req.body ?? {};
+
+  if (
+    typeof userName !== "string" ||
+    !userName.trim() ||
+    typeof email !== "string" ||
+    !email.trim() ||
+    typeof password !== "string" ||
+    !password
+  ) {
+    return res.status(400).json({
+      message: "userName, email, and password are required",
+    });
+  }
+
+  try {
+    const normalizedUserName = userName.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await userModel.findOne({
+      $or: [{ userName: normalizedUserName }, { email: normalizedEmail }],
+    });
+    if (existingUser) {
+      return res.status(409).json({
+        message: "A user with that email or username already exists",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const admin = await userModel.create({
+      userName: normalizedUserName,
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "admin",
+    });
+
+    return res.status(201).json({
+      message: "Admin created successfully",
+      user: serializeUser(admin),
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        message: "A user with that email or username already exists",
+      });
+    }
+    if (error?.name === "ValidationError") {
+      return res.status(400).json({ message: "Invalid admin data" });
+    }
+
+    console.error(error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+async function updateDoctorApprovalStatus(req, res) {
+  const { id } = req.params;
+  const { status } = req.body ?? {};
+
+  if (!mongoose.isObjectIdOrHexString(id)) {
+    return res.status(400).json({ message: "Invalid doctor ID" });
+  }
+  if (status !== "approved" && status !== "rejected") {
+    return res.status(400).json({
+      message: "status must be approved or rejected",
+    });
+  }
+
+  try {
+    const doctor = await userModel.findOneAndUpdate(
+      { _id: id, role: "doctor" },
+      { $set: { doctorApprovalStatus: status } },
+      { new: true, runValidators: true },
+    ).select("userName email role doctorApprovalStatus specialization experience isActive");
+
+    if (!doctor) {
+      return res.status(404).json({ message: "Doctor not found" });
+    }
+
+    return res.status(200).json({
+      message: `Doctor application ${status}`,
+      user: serializeUser(doctor),
+    });
+  } catch (error) {
+    if (error?.name === "ValidationError") {
+      return res.status(400).json({ message: "Invalid doctor approval status" });
+    }
     console.error(error);
     return res.status(500).json({ message: "Internal server error" });
   }
@@ -202,6 +299,8 @@ async function getStats(req, res) {
 export {
   getUsers,
   createDoctor,
+  createAdmin,
+  updateDoctorApprovalStatus,
   deleteUser,
   updateUserStatus,
   getAppointments,

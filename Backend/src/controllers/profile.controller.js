@@ -13,6 +13,7 @@ function profileResponse(user) {
   if (user.role === "doctor") {
     profile.specialization = user.specialization;
     profile.experience = user.experience;
+    profile.doctorApprovalStatus = user.doctorApprovalStatus ?? "approved";
   }
   return profile;
 }
@@ -20,7 +21,7 @@ function profileResponse(user) {
 async function getProfile(req, res) {
   try {
     const user = await userModel.findById(req.user._id).select(
-      "userName email role isActive specialization experience profileImage",
+      "userName email role doctorApprovalStatus isActive specialization experience profileImage",
     );
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -34,6 +35,13 @@ async function getProfile(req, res) {
 }
 
 async function updateProfile(req, res) {
+  if (
+    req.user.role === "doctor" &&
+    (req.user.doctorApprovalStatus ?? "approved") !== "approved"
+  ) {
+    return res.status(403).json({ message: "Doctor account is awaiting approval" });
+  }
+
   const body = req.body;
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return res.status(400).json({ message: "A profile object is required" });
@@ -76,7 +84,7 @@ async function updateProfile(req, res) {
 
   try {
     const user = await userModel.findById(req.user._id).select(
-      "userName email role isActive specialization experience",
+      "userName email role doctorApprovalStatus isActive specialization experience",
     );
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -111,13 +119,20 @@ async function updateProfile(req, res) {
 }
 
 async function uploadProfileImage(req, res) {
+  if (
+    req.user.role === "doctor" &&
+    (req.user.doctorApprovalStatus ?? "approved") !== "approved"
+  ) {
+    return res.status(403).json({ message: "Doctor account is awaiting approval" });
+  }
+
   if (!req.file) {
     return res.status(400).json({ message: "profileImage file is required" });
   }
 
   try {
     const user = await userModel.findById(req.user._id).select(
-      "userName email role isActive specialization experience profileImage",
+      "userName email role doctorApprovalStatus isActive specialization experience profileImage",
     );
     if (!user) {
       return res.status(404).json({ message: "User not found" });

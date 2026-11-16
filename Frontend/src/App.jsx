@@ -8,7 +8,9 @@ import {
   AdminOverview,
   AppointmentList,
   AvailabilityPage,
+  DoctorPendingScreen,
   DoctorOverview,
+  DoctorSchedule,
   NotificationsPage,
   PatientDiscover,
   PeoplePage,
@@ -130,6 +132,9 @@ export default function App() {
     return <div className="app-boot"><span className="brand-mark"><span className="spinner" /></span><span>Opening your care space…</span></div>;
   }
   if (!user) return <><AuthScreen theme={theme} onToggleTheme={() => setTheme((current) => current === "dark" ? "light" : "dark")} onAuthenticated={authenticated} /><Toast toast={toast} onClose={() => setToast(null)} /></>;
+  if (user.role === "doctor" && user.doctorApprovalStatus !== "approved") {
+    return <DoctorPendingScreen status={user.doctorApprovalStatus} onLogout={logout} loggingOut={loggingOut} />;
+  }
 
   let page;
   if (view === "discover" && user.role === "patient") {
@@ -140,6 +145,8 @@ export default function App() {
     page = <AdminOverview setView={setView} />;
   } else if (view === "overview" && user.role === "doctor") {
     page = <DoctorOverview user={user} setView={setView} />;
+  } else if (view === "schedule" && user.role === "doctor") {
+    page = <DoctorSchedule />;
   } else if (view === "people" && user.role === "admin") {
     page = <PeoplePage notify={notify} />;
   } else if (view === "availability" && user.role === "doctor") {

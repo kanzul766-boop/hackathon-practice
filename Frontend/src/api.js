@@ -1,4 +1,10 @@
 const TOKEN_KEY = "clair_session_token";
+const API_BASE_URL = import.meta.env.PROD
+  ? (
+      import.meta.env.VITE_API_BASE_URL ||
+      "https://clinic-appointment-management-hacka.vercel.app"
+    ).replace(/\/+$/, "")
+  : "";
 
 export function getToken() {
   return sessionStorage.getItem(TOKEN_KEY);
@@ -22,7 +28,7 @@ export async function api(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
     credentials: "include",
